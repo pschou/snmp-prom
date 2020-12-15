@@ -351,17 +351,16 @@ func getSNMP(i int) *g.GoSNMP {
 func loadKeys() {
 	keypair_mu.RLock()
 	defer keypair_mu.RUnlock()
-	var err error
 
 	tmp_key, err_k := tls.LoadX509KeyPair(certFile, keyFile)
 	if err_k != nil {
 		if keypair == nil {
-			log.Fatalf("failed to loadkey pair: %s", err)
+			log.Fatalf("failed to loadkey pair: %s %s %s", certFile, keyFile, err_k)
 		}
 		keypair_count++
 		log.Println("WARNING: Cannot load keypair (cert/key)", certFile, keyFile, "attempt:", keypair_count)
 		if keypair_count > 10 {
-			log.Fatalf("failed to loadkey pair: %s", err)
+			log.Fatalf("failed to refresh pair: %s %s %s", certFile, keyFile, err_k)
 		}
 	} else {
 		if debug {
@@ -374,12 +373,12 @@ func loadKeys() {
 	err_r := LoadCertficatesFromFile(rootFile)
 	if err_r != nil {
 		if rootpool == nil {
-			log.Fatalf("failed to load CA: %s", err)
+			log.Fatalf("failed to load CA: %s %s", rootFile, err_r)
 		}
 		root_count++
 		log.Println("WARNING: Cannot load CA file", rootFile, "attempt:", root_count)
 		if root_count > 10 {
-			log.Fatalf("failed to CA: %s", err)
+			log.Fatalf("failed refresh CA: %s %s", rootFile, err_r)
 		}
 	} else {
 		if debug {
