@@ -1,0 +1,51 @@
+interval: 15s
+- name: router
+  enabled: true
+  host: 10.12.0.1
+  port: 161
+  protocol: udp
+
+  # Authentication details
+  community: public
+  version: 3
+  username: paul
+  auth-proto: SHA1
+  prov-proto: AES
+  auth-password: authpass
+  priv-password: encpass
+
+  # Statically loaded labels for the device
+  #static-labels:
+  #  replica: primary
+  #  inventory: RA123456
+  static-status:
+    up: 1
+
+  labels:
+    identity: .1.3.6.1.2.1.1.5.0
+    model: .1.3.6.1.2.1.1.1.0
+
+  status:
+    uptime: .1.3.6.1.2.1.1.3.0
+
+  groupings:
+  - group: interfaces
+    priority: true
+    labels:
+      name: .1.3.6.1.2.1.31.1.1.1.1
+    status:
+      ifInErrors: .1.3.6.1.2.1.2.2.1.14
+      ifOutErrors: .1.3.6.1.2.1.2.2.1.20
+      ifHighSpeed: .1.3.6.1.2.1.31.1.1.1.15
+      ifHCOutOctets: .1.3.6.1.2.1.31.1.1.1.10
+      ifHCInOctets: .1.3.6.1.2.1.31.1.1.1.6
+  - group: routes_v4
+    labels:
+      dest: .1.3.6.1.2.1.4.24.4.1.1
+      nextHop: .1.3.6.1.2.1.4.24.4.1.4
+      mask: .1.3.6.1.2.1.4.24.4.1.2
+    status:
+      active: .1.3.6.1.2.1.4.24.4.1.16
+      ifIndex: .1.3.6.1.2.1.4.24.4.1.5
+      age: .1.3.6.1.2.1.4.24.4.1.8
+
