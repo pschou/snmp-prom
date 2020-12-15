@@ -32,7 +32,6 @@ This app is a generic SNMP-Prometheus tool that allows Prometheus & Grafana to q
 First you must build a config file to tell snmp-prom how to query your SNMP devices.  To start let's first look at what a config.yml looks likt then we'll break it down:
 
 ```
-version: 1
 interval: 15s
 - name: router
   enabled: true
