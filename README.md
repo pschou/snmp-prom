@@ -3,6 +3,8 @@ Simple SNMP exporter for Prometheus
 
 This app is a generic SNMP-Prometheus tool that allows Prometheus & Grafana to query any SNMP endpoint to display live metrics.
 
+![Grafana Page](/screens/SNMP_Screen.PNG?raw=true "Grafana example of SNMP metrics")
+
 # Command line arguments:
 ```
  Usage of ./snmp-prom:
@@ -83,9 +85,9 @@ Properties fields:
 - name:  What to name this device (device_name in prometheus)
 - enabled:  Either true or false, enables queries to the device
 - host:  The actual network location of the device, such as an IP address
-- port:  If snmp is on a non-standard port, set it here  (default: 161)
-- protocol:  Sets snmp to use either udp or tcp (default: udp)
-- community:  The snmp community to connect with
+- port:  If SNMP is on a non-standard port, set it here  (default: 161)
+- protocol:  Sets SNMP to use either udp or tcp (default: udp)
+- community:  The SNMP community to connect with
 - version:  The version of SNMP to use for connection: 1, 2c, 3
 - copy-oids-from:  Use an already set device as a template for this device
 - interval:  How often to query this device (default: see general section default)

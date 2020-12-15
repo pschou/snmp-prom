@@ -541,8 +541,10 @@ func collectDev(idev int) {
 	oids = mkList(oids, config.Devices[idev].Labels)
 	dev_data, err := snmp.Get(oids) // Get() accepts up to g.MAX_OIDS
 	if err != nil {
-		log.Println("Error during oid fetch for interface status host:", config.Devices[idev].Host, err)
+		log.Println("Error during oid fetch for device status host:", config.Devices[idev].Host, err)
+		return
 	}
+	minLatency := dev_data.Latency.Nanoseconds()
 	//dev_query <- result
 	//}()
 	//dev_data := <-dev_query
@@ -582,7 +584,7 @@ func collectDev(idev int) {
 
 	// Loop over the rest of the non priority groups
 	for i, group := range config.Devices[idev].Groupings {
-		time.Sleep(80 * time.Millisecond) // * time.Nanosecond)
+		time.Sleep(80 * time.Millisecond)
 		if !group.Priority {
 			if debug {
 				fmt.Println("#", config.Devices[idev].Name, "setting up query for", group.Group)
@@ -595,6 +597,9 @@ func collectDev(idev int) {
 			}
 
 			result, err := snmp.GetBulk(oids, 0, 50) // Get() accepts up to g.MAX_OIDS
+			if err != nil {
+				continue
+			}
 			config.Devices[idev].Groupings[i].latency = result.Latency.Nanoseconds()
 
 			if err != nil {
@@ -604,7 +609,6 @@ func collectDev(idev int) {
 		}
 	}
 
-	minLatency := int64(0)
 	for i, grp := range config.Devices[idev].Groupings {
 		if minLatency == 0 {
 			minLatency = grp.latency
