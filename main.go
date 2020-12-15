@@ -113,18 +113,20 @@ func main() {
 	keyFile = *key_file
 	certFile = *cert_file
 	rootFile = *root_file
-	rootpool = x509.NewCertPool()
 
-	loadKeys()
-	go func() {
-		ticker := time.NewTicker(time.Minute)
-		for {
-			select {
-			case <-ticker.C:
-				loadKeys()
+	if *tls_enabled {
+		rootpool = x509.NewCertPool()
+		loadKeys()
+		go func() {
+			ticker := time.NewTicker(time.Minute)
+			for {
+				select {
+				case <-ticker.C:
+					loadKeys()
+				}
 			}
-		}
-	}()
+		}()
+	}
 
 	yamlFile, err := ioutil.ReadFile(*config_file)
 	if err != nil {
