@@ -94,6 +94,7 @@ var rootpool *x509.CertPool
 var certs_loaded = make(map[string]bool, 0)
 var debug = false
 var maxRepetitions = uint8(50)
+var timeout = 5
 
 func main() {
 	flag.Usage = func() {
@@ -111,11 +112,13 @@ func main() {
 	var tls_enabled = flag.Bool("tls", false, "Enable listener TLS (use -tls=true)")
 	var verbose = flag.Bool("debug", false, "Verbose output")
 	var maxRep = flag.Int("maxrep", 50, "Max Repetitions")
+	var Timeout = flag.Int("timeout", 5, "Per query timeout")
 	flag.Parse()
 
 	var err error
 	debug = *verbose
 	maxRepetitions = uint8(*maxRep)
+	timeout = *Timeout
 
 	keyFile = *key_file
 	certFile = *cert_file
@@ -279,7 +282,7 @@ func getSNMP(i int) *g.GoSNMP {
 		Transport:          "udp",
 		Community:          "public",
 		Version:            g.Version2c,
-		Timeout:            time.Duration(5) * time.Second,
+		Timeout:            time.Duration(timeout) * time.Second,
 		Retries:            0,
 		ExponentialTimeout: false,
 		MaxOids:            50,
@@ -524,12 +527,12 @@ func collectDev(idev int) {
 					}
 				}
 
-				{
-					oids := mkList([]string{}, config.Devices[idev].Groupings[i].Labels)
-					var result *g.SnmpPacket
-					result, err = snmp.GetBulk(oids, 0, uint8(maxRepetitions))
+				for _, oid := range config.Devices[idev].Groupings[i].Labels {
+					result, err := snmp.WalkAll(oid)
 					if err == nil {
-						data = append(data, result.Variables...)
+						data = append(data, result...)
+					} else {
+						break
 					}
 				}
 
@@ -553,7 +556,6 @@ func collectDev(idev int) {
 	snmp := getSNMP(idev)
 	defer snmp.Conn.Close()
 	snmp.Retries = 3
-	snmp.Timeout = time.Duration(3) * time.Second
 
 	// Setup output details / target
 	runTime := config.Devices[idev].nextRun / 1e6
@@ -641,12 +643,12 @@ func collectDev(idev int) {
 				}
 			}
 
-			{
-				oids := mkList([]string{}, config.Devices[idev].Groupings[i].Labels)
-				var result *g.SnmpPacket
-				result, err = snmp.GetBulk(oids, 0, uint8(maxRepetitions))
+			for _, oid := range config.Devices[idev].Groupings[i].Labels {
+				result, err := snmp.WalkAll(oid)
 				if err == nil {
-					data = append(data, result.Variables...)
+					data = append(data, result...)
+				} else {
+					break
 				}
 			}
 
@@ -806,18 +808,50 @@ func oidIndex(lbl map[string]string, oid string, outFmt string) {
 		} else if len(sp) > 6 {
 			lbl["oid_mac"] = byteStr(b[0:6], outFmt)
 			lbl["oid_index"] = strings.Join(sp[6:], ".")
+		} else {
+			lbl["oid_index"] = "!mac " + byteStr(b, "hex")
 		}
-	case "route":
-		if len(sp) == 13 {
+	case "route1":
+		if len(sp) >= 13 {
 			lbl["oid_subnet"] = strings.Join(sp[0:4], ".")
 			lbl["oid_mask"] = strings.Join(sp[4:8], ".")
+			lbl["oid_IPv"] = strings.Join(sp[8:9], ".")
 			lbl["oid_nextHop"] = strings.Join(sp[9:13], ".")
-		} else if len(sp) == 17 {
-			lbl["oid_index"] = sp[0]
-			lbl["oid_addr"] = byteStr(b[1:17], "ipv6")
+			if len(sp) > 13 {
+				lbl["oid_index"] = strings.Join(sp[13:len(sp)], ".")
+			}
+		} else {
+			lbl["oid_index"] = "!route4 " + oid
+		}
+	case "route14":
+		if len(sp) >= 14 {
+			lbl["oid_subnet"] = strings.Join(sp[0:4], ".")
+			lbl["oid_mask"] = strings.Join(sp[4:8], ".")
+			lbl["oid_IPv"] = strings.Join(sp[8:9], ".")
+			lbl["oid_nextHop"] = strings.Join(sp[10:14], ".")
+			if len(sp) > 14 {
+				lbl["oid_index"] = strings.Join(sp[13:len(sp)], ".")
+			}
+		} else {
+			lbl["oid_index"] = "!route14 " + oid
+		}
+	case "route6":
+		if len(sp) >= 17 {
+			lbl["oid_addr"] = byteStr(b[0:16], "ipv6")
+			if len(sp) > 16 {
+				lbl["oid_index"] = strings.Join(sp[16:len(sp)], ".")
+			}
+		} else {
+			lbl["oid_index"] = "!route6 " + oid
+		}
+	case "ipv4":
+		if len(sp) == 4 {
+			lbl["oid_ipv4"] = oid
+		} else {
+			lbl["oid_index"] = "!ipv4 " + oid
 		}
 	default:
-		lbl["oid_index"] = byteStr(b, outFmt)
+		lbl["oid_index"] = oid
 	}
 }
 
