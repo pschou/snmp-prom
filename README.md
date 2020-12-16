@@ -67,6 +67,7 @@ interval: 15s
       ifHCOutOctets: .1.3.6.1.2.1.31.1.1.1.10
       ifHCInOctets: .1.3.6.1.2.1.31.1.1.1.6
   - group: wireless
+		index: mac
     labels:
       radio_name: .1.3.6.1.4.1.14988.1.1.1.2.1.20
     status:
@@ -122,7 +123,7 @@ Prometheus Labels and Status:
 This is where groups of metrics are defined, such as details by interface port, routing table entries, connected wireless users, any anything else exposed by the SNMP endpoint.
 - group:  The name of the group to be appended to the metric name
 - priority:  When querying devices, and you want compare metrics between devices (such as interface throughput), this sets this group as priority and should be queried first, on the interval mark
-- query-metrics:  Include metric details about this group query, such as time of query and latency
+- index:  Parse the subtree oid into oid label values:  route, mac, hex, ipv4, ipv6
 - labels:  Dynamic labels to be passed to prometheus (such as port: 1.1...)
 - status:  Dynamic numeric values to be passed to prometheus (such as tx_bytes: 1.1...)
 - static-labels:  Static "label: value" to be passed to prometheus for group labeling

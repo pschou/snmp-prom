@@ -11,7 +11,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -21,6 +20,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -56,10 +57,10 @@ type Config struct {
 		Interval     string             `yaml:"interval"`
 		Enabled      bool               `yaml:"enabled" default:true`
 		CopyFrom     string             `yaml:"copy-oids-from"`
-		StaticLabels map[string]string  `yaml:"static-labels"`
-		StaticStatus map[string]float64 `yaml:"static-status"`
 		Labels       map[string]string  `yaml:"labels"`
 		Status       map[string]string  `yaml:"status"`
+		StaticLabels map[string]string  `yaml:"static-labels"`
+		StaticStatus map[string]float64 `yaml:"static-status"`
 		Groupings    []ConfigGroup      `yaml:"groupings"`
 		nextRun      int64
 		latency      int64
@@ -67,6 +68,7 @@ type Config struct {
 }
 type ConfigGroup struct {
 	Group        string             `yaml:"group"`
+	OidIndex     string             `yaml:"index"`
 	Priority     bool               `yaml:"priority"`
 	QueryMetrics bool               `yaml:"query-metrics"`
 	Labels       map[string]string  `yaml:"labels"`
@@ -143,6 +145,7 @@ func main() {
 		config.Interval = "15s"
 	}
 
+	passed := true
 	for i, dev := range config.Devices {
 		if dev.CopyFrom != "" {
 			src_i := 0
@@ -163,6 +166,17 @@ func main() {
 			}
 		}
 
+		passed = passed && checkLabels(config.Devices[i].StaticLabels)
+		passed = passed && checkLabeln(config.Devices[i].StaticStatus)
+		passed = passed && checkLabels(config.Devices[i].Labels)
+		passed = passed && checkLabels(config.Devices[i].Status)
+		for _, grp := range config.Devices[i].Groupings {
+			passed = passed && checkLabels(grp.StaticLabels)
+			passed = passed && checkLabeln(grp.StaticStatus)
+			passed = passed && checkLabels(grp.Labels)
+			passed = passed && checkLabels(grp.Status)
+		}
+
 		if debug {
 			log.Println(fmt.Sprintf("#conf %s: %+v", dev.Name, config.Devices[i]))
 		}
@@ -170,7 +184,9 @@ func main() {
 		if dev.Interval == "" {
 			config.Devices[i].Interval = config.Interval
 		}
-
+	}
+	if passed == false {
+		log.Fatal("Failed config checks")
 	}
 
 	var l net.Listener
@@ -594,6 +610,14 @@ func collectDev(idev int) {
 				fmt.Println("#", config.Devices[idev].Name, "sending query for", config.Devices[idev].Groupings[i].Group, oids)
 			}
 
+			/*results := []SnmpPDU{}
+			for _, oid := range oids {
+				result, err := snmp.WalkAll(oids)
+				if err == nil {
+					results = append(results, result)
+				}
+			}*/
+
 			result, err := snmp.GetBulk(oids, 0, maxRepetitions)
 			if err != nil {
 				continue
@@ -627,12 +651,10 @@ func printPDU(pdu g.SnmpPDU, oid_type string) string {
 	switch pdu.Type {
 	case g.OctetString:
 		b := pdu.Value.([]byte)
-		switch strings.TrimSpace(oid_type) {
-		case "hex":
-			return hex.EncodeToString(b)
-		default:
+		if strings.TrimSpace(oid_type) == "" {
 			return fmt.Sprintf("%s", string(b))
 		}
+		return byteStr(b, strings.TrimSpace(oid_type))
 	case g.Counter64:
 		return fmt.Sprintf("%v", g.ToBigInt(pdu.Value))
 	default:
@@ -683,11 +705,111 @@ func parse(dev_labels map[string]string, group ConfigGroup, data *g.SnmpPacket, 
 				if _, ok := group_labels[t]; !ok {
 					group_labels[t] = make(map[string]string)
 				}
-				group_labels[t]["oid_index"] = t
+				oidIndex(group_labels[t], t, group.OidIndex)
+				//group_labels[t]["oid_index"] = t
 				outData.WriteString(fmt.Sprintf("snmp_%s_%s{%s} %v %d\n", group.Group, stat, promLabels(dev_labels, common_labels, group_labels[t]), printPDU(variable, oid_type), runTime))
 			}
 		}
 	}
+}
+
+func checkLabels(lbls map[string]string) bool {
+	check := true
+	for lbl, _ := range lbls {
+		if checkLabel(lbl) == false {
+			fmt.Println("  invalid label:", lbl)
+			check = false
+		}
+	}
+	return check
+}
+
+func byteStr(b []byte, outFmt string) string {
+	s := ""
+	switch outFmt {
+	case "ipv4":
+		for i := 0; i < len(b); i++ {
+			if i == 1 {
+				s = fmt.Sprintf("%d", b[i])
+			} else {
+				s = fmt.Sprintf("%s.%d", s, b[i])
+			}
+		}
+	case "ipv6":
+		for i := 1; i < len(b); i = i + 2 {
+			if i == 1 {
+				s = fmt.Sprintf("%02x%02x", b[i-1], b[i])
+			} else {
+				s = fmt.Sprintf("%s:%02x%02x", s, b[i-1], b[i])
+			}
+		}
+	case "mac":
+		for i, c := range b {
+			if i == 0 {
+				s = fmt.Sprintf("%02x", c)
+			} else {
+				s = fmt.Sprintf("%s:%02x", s, c)
+			}
+		}
+	case "hex":
+		return fmt.Sprintf("%02x", b)
+	default:
+		return fmt.Sprintf("type! %02x", b)
+	}
+	return s
+}
+
+func oidIndex(lbl map[string]string, oid string, outFmt string) {
+	if outFmt == "" {
+		lbl["oid_index"] = oid
+		return
+	}
+
+	sp := strings.Split(oid, ".")
+	b := make([]byte, len(sp))
+	for i, v := range sp {
+		t, _ := strconv.Atoi(v)
+		b[i] = byte(t)
+	}
+	switch outFmt {
+	case "mac":
+		if len(sp) == 6 {
+			lbl["oid_mac"] = byteStr(b[0:6], outFmt)
+		} else if len(sp) > 6 {
+			lbl["oid_mac"] = byteStr(b[0:6], outFmt)
+			lbl["oid_index"] = strings.Join(sp[6:], ".")
+		}
+	case "route":
+		if len(sp) == 13 {
+			lbl["oid_subnet"] = strings.Join(sp[0:4], ".")
+			lbl["oid_mask"] = strings.Join(sp[4:8], ".")
+			lbl["oid_nextHop"] = strings.Join(sp[9:13], ".")
+		} else if len(sp) == 17 {
+			lbl["oid_index"] = sp[0]
+			lbl["oid_addr"] = byteStr(b[1:17], "ipv6")
+		}
+	default:
+		lbl["oid_index"] = byteStr(b, outFmt)
+	}
+}
+
+func checkLabeln(lbls map[string]float64) bool {
+	check := true
+	for lbl, _ := range lbls {
+		if checkLabel(lbl) == false {
+			fmt.Println("  invalid label:", lbl, "/ allowed characters: [a-zA-Z0-9_]")
+			check = false
+		}
+	}
+	return check
+}
+
+func checkLabel(lbl string) bool {
+	matched, err := regexp.Match(`^[a-zA-Z_][a-zA-Z0-9_]*$`, []byte(lbl))
+	if err != nil {
+		return false
+	}
+	return matched
 }
 
 func promLabels(lbl ...map[string]string) string {
