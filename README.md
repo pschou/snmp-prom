@@ -42,10 +42,11 @@ interval: 15s
   # Authentication details
   community: public
   version: 3
+	username: secure
   auth-protocol: SHA1
-  enc-protocol: AES
+  priv-protocol: AES
   auth-password: authpass
-  enc-password: encpass
+  priv-password: encpass
 
   labels:
     identity: .1.3.6.1.2.1.1.5.0
@@ -81,13 +82,12 @@ interval: 15s
   protocol: udp
   copy-oids-from: router
 
-  # Authentication details
+  # Authentication details, only auth, no privacy
   community: public
   version: 3
+	username: seal
   auth-protocol: SHA1
-  enc-protocol: AES
   auth-password: authpass2
-  enc-password: encpass2
 ```
 
 ## General Section
