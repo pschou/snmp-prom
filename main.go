@@ -62,7 +62,7 @@ type Config struct {
 		Status       map[string]string  `yaml:"status"`
 		Groupings    []ConfigGroup      `yaml:"groupings"`
 		nextRun      int64
-		minLatency   int64
+		latency      int64
 	} `yaml:"devices"`
 }
 type ConfigGroup struct {
@@ -73,7 +73,6 @@ type ConfigGroup struct {
 	Status       map[string]string  `yaml:"status"`
 	StaticLabels map[string]string  `yaml:"static-labels"`
 	StaticStatus map[string]float64 `yaml:"static-status"`
-	latency      int64
 }
 
 var deviceMetrics []string
@@ -89,6 +88,7 @@ var root_count = 0
 var rootpool *x509.CertPool
 var certs_loaded = make(map[string]bool, 0)
 var debug = false
+var maxRepetitions = uint8(50)
 
 func main() {
 	flag.Usage = func() {
@@ -105,10 +105,12 @@ func main() {
 	var secure_server = flag.Bool("secure-server", true, "Enforce TLS 1.2 on server side")
 	var tls_enabled = flag.Bool("tls", false, "Enable listener TLS (use -tls=true)")
 	var verbose = flag.Bool("debug", false, "Verbose output")
+	var maxRep = flag.Int("maxrep", 50, "Max Repetitions")
 	flag.Parse()
 
 	var err error
 	debug = *verbose
+	maxRepetitions = uint8(*maxRep)
 
 	keyFile = *key_file
 	certFile = *cert_file
@@ -260,7 +262,7 @@ func getSNMP(i int) *g.GoSNMP {
 		Retries:            0,
 		ExponentialTimeout: false,
 		MaxOids:            50,
-		MaxRepetitions:     10,
+		MaxRepetitions:     maxRepetitions,
 		Target:             config.Devices[i].Host,
 		Context:            context.TODO(),
 	}
@@ -470,23 +472,21 @@ func collectDev(idev int) {
 			if debug {
 				fmt.Println("#", config.Devices[idev].Name, "setting up query for", group.Group)
 			}
-			if config.Devices[idev].minLatency == 0 {
+			if config.Devices[idev].latency == 0 {
 				// zero latency is impossible, so let's put something as a temporary placeholder
-				config.Devices[idev].minLatency = 200000
+				config.Devices[idev].latency = 200000
 			}
 
 			go func(idev int, i int) {
 				oids := mkList([]string{}, config.Devices[idev].Groupings[i].Status)
 				oids = mkList(oids, config.Devices[idev].Groupings[i].Labels)
 				if debug {
-					fmt.Println("#", config.Devices[idev].Name, "waiting", config.Devices[idev].nextRun-time.Now().UnixNano(), "net latency adjustment", config.Devices[idev].minLatency)
+					fmt.Println("#", config.Devices[idev].Name, "waiting", config.Devices[idev].nextRun-time.Now().UnixNano(), "net latency adjustment", config.Devices[idev].latency)
 					fmt.Println("to send query for", config.Devices[idev].Groupings[i].Group)
 				}
-				var send time.Time
-				var reply time.Time
-				time.Sleep(time.Duration(config.Devices[idev].nextRun-time.Now().UnixNano()-config.Devices[idev].minLatency/2) * time.Nanosecond)
+				time.Sleep(time.Duration(config.Devices[idev].nextRun-time.Now().UnixNano()-config.Devices[idev].latency/2) * time.Nanosecond)
 
-				result, err := snmp.GetBulk(oids, 0, 50)
+				result, err := snmp.GetBulk(oids, 0, maxRepetitions)
 				if err != nil {
 					if debug {
 						fmt.Println("Error in GetBulk on", config.Devices[idev].Name, err)
@@ -495,17 +495,6 @@ func collectDev(idev int) {
 					return
 				}
 
-				if &result.Latency != nil {
-					config.Devices[idev].Groupings[i].latency = result.Latency.Nanoseconds()
-				}
-
-				if debug {
-					fmt.Println("#", config.Devices[idev].Name, "sent query for ", config.Devices[idev].Groupings[i].Group, "at", send, "with latency adjustment")
-					fmt.Println("#", config.Devices[idev].Name, " MISSED the mark by ---> ", (send.UnixNano() - config.Devices[idev].nextRun - config.Devices[idev].minLatency/2), "nanoseconds  <---")
-				}
-				if debug {
-					fmt.Println("#", config.Devices[idev].Name, "reply query for ", config.Devices[idev].Groupings[i].Group, "at", reply)
-				}
 				if err != nil {
 					log.Println(Red+"Error during oid fetch for interface status host:", config.Devices[idev].Host, err, Reset)
 				}
@@ -540,12 +529,20 @@ func collectDev(idev int) {
 	time.Sleep(80 * time.Millisecond) // * time.Nanosecond)
 	oids := mkList([]string{}, config.Devices[idev].Status)
 	oids = mkList(oids, config.Devices[idev].Labels)
+	var sent time.Time
+	snmp.Observer = func(e g.EventType) {
+		if e == g.Sent {
+			sent = time.Now()
+		} else if e == g.Reply {
+			config.Devices[idev].latency = time.Since(sent).Nanoseconds()
+		}
+	}
 	dev_data, err := snmp.Get(oids) // Get() accepts up to g.MAX_OIDS
+	snmp.Observer = nil
 	if err != nil {
 		log.Println("Error during oid fetch for device status host:", config.Devices[idev].Host, err)
 		return
 	}
-	minLatency := dev_data.Latency.Nanoseconds()
 	//dev_query <- result
 	//}()
 	//dev_data := <-dev_query
@@ -597,11 +594,10 @@ func collectDev(idev int) {
 				fmt.Println("#", config.Devices[idev].Name, "sending query for", config.Devices[idev].Groupings[i].Group, oids)
 			}
 
-			result, err := snmp.GetBulk(oids, 0, 50) // Get() accepts up to g.MAX_OIDS
+			result, err := snmp.GetBulk(oids, 0, maxRepetitions)
 			if err != nil {
 				continue
 			}
-			config.Devices[idev].Groupings[i].latency = result.Latency.Nanoseconds()
 
 			if err != nil {
 				log.Println("Error during oid fetch for interface status host:", config.Devices[idev].Host, err)
@@ -611,17 +607,11 @@ func collectDev(idev int) {
 	}
 
 	for i, grp := range config.Devices[idev].Groupings {
-		if minLatency == 0 {
-			minLatency = grp.latency
-		} else if grp.latency < minLatency && grp.latency > 0 {
-			minLatency = grp.latency
-		}
 		parse(dev_labels, grp, group_data[i], runTime, &outData)
 	}
-	config.Devices[idev].minLatency = minLatency
 
-	if minLatency > 0 {
-		outData.WriteString(fmt.Sprintf("snmp_latency_seconds{%s} %v %d\n", promLabels(dev_labels), float64(minLatency)/1e9, runTime))
+	if config.Devices[idev].latency > 0 {
+		outData.WriteString(fmt.Sprintf("snmp_latency_seconds{%s} %v %d\n", promLabels(dev_labels), float64(config.Devices[idev].latency)/1e9, runTime))
 	}
 }
 
@@ -696,11 +686,6 @@ func parse(dev_labels map[string]string, group ConfigGroup, data *g.SnmpPacket, 
 				group_labels[t]["oid_index"] = t
 				outData.WriteString(fmt.Sprintf("snmp_%s_%s{%s} %v %d\n", group.Group, stat, promLabels(dev_labels, common_labels, group_labels[t]), printPDU(variable, oid_type), runTime))
 			}
-		}
-		if group.QueryMetrics {
-			outData.WriteString(fmt.Sprintf("snmp_%s_%s_query_time{%s} %v %d\n", group.Group, stat, promLabels(dev_labels), runTime/1000, runTime))
-			outData.WriteString(fmt.Sprintf("snmp_%s_%s_query_latency{%s} %v %d\n", group.Group, stat, promLabels(dev_labels),
-				float64(data.Latency)/1e9, runTime))
 		}
 	}
 }

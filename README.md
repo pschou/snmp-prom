@@ -41,10 +41,9 @@ interval: 15s
 
   # Authentication details
   community: public
-  trap-version: 2
-  auth-type: none
-  auth: SHA1
-  enc: AES
+  version: 3
+  auth-protocol: SHA1
+  enc-protocol: AES
   auth-password: authpass
   enc-password: encpass
 
@@ -74,6 +73,21 @@ interval: 15s
       tx_signal_strength: .1.3.6.1.4.1.14988.1.1.1.2.1.19
       tx_bytes: .1.3.6.1.4.1.14988.1.1.1.2.1.4
       rx_bytes: .1.3.6.1.4.1.14988.1.1.1.2.1.5
+
+- name: betaRouter
+  enabled: true
+  host: 10.12.30.1
+  port: 161
+  protocol: udp
+  copy-oids-from: router
+
+  # Authentication details
+  community: public
+  version: 3
+  auth-protocol: SHA1
+  enc-protocol: AES
+  auth-password: authpass2
+  enc-password: encpass2
 ```
 
 ## General Section
