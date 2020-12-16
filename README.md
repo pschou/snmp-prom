@@ -32,7 +32,7 @@ This app is a generic SNMP-Prometheus tool that allows Prometheus & Grafana to q
 First you must build a config file to tell snmp-prom how to query your SNMP devices.  To start let's first look at what a config.yml looks likt then we'll break it down:
 
 ```
-interval: 15s
+interval: 1m
 - name: router
   enabled: true
   host: 10.12.0.1
@@ -92,7 +92,7 @@ interval: 15s
 ```
 
 ## General Section
-- interval:  The default interval for all devices, unless specified (default: 15s)
+- interval:  The default interval for all devices, unless specified (default: 1m)
 
 ## Device Sub-tree
 Properties fields:

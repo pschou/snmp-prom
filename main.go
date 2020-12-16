@@ -41,13 +41,13 @@ var White = "\033[97m"
 
 type Config struct {
 	Push     string `yaml:"push"`
-	Interval string `default:"15s" yaml:"interval"`
+	Interval string `yaml:"interval"`
 	Devices  []struct {
 		Name         string             `yaml:"name"`
 		Host         string             `yaml:"host"`
-		Port         uint16             `default:161 yaml:"port"`
-		Protocol     string             `default:"udp" yaml:"protocol"`
-		Community    string             `default:"public" yaml:"community"`
+		Port         uint16             `yaml:"port"`
+		Protocol     string             `yaml:"protocol"`
+		Community    string             `yaml:"community"`
 		UserName     string             `yaml:"username"`
 		AuthProto    string             `yaml:"auth-protocol"`
 		AuthPassword string             `yaml:"auth-password"`
@@ -64,6 +64,9 @@ type Config struct {
 		Groupings    []ConfigGroup      `yaml:"groupings"`
 		nextRun      int64
 		latency      int64
+		running      bool
+		group_data   [][](g.SnmpPDU)
+		//group_string   []string
 	} `yaml:"devices"`
 }
 type ConfigGroup struct {
@@ -142,7 +145,7 @@ func main() {
 		log.Fatal("Invalid config file format", err)
 	}
 	if config.Interval == "" {
-		config.Interval = "15s"
+		config.Interval = "1m"
 	}
 
 	passed := true
@@ -175,6 +178,8 @@ func main() {
 			passed = passed && checkLabeln(grp.StaticStatus)
 			passed = passed && checkLabels(grp.Labels)
 			passed = passed && checkLabels(grp.Status)
+			config.Devices[i].group_data = make([][](g.SnmpPDU), len(config.Devices[i].Groupings))
+			config.Devices[i].running = false
 		}
 
 		if debug {
@@ -479,7 +484,13 @@ func mkList(oids []string, devOids map[string]string) []string {
 }
 
 func collectDev(idev int) {
-	query_chan := make(chan *g.SnmpPacket) // preallocate channels for parallelism
+	if config.Devices[idev].running {
+		return
+	}
+	config.Devices[idev].running = true
+	defer func() { config.Devices[idev].running = false }()
+
+	query_chan := make(chan []g.SnmpPDU) // preallocate channels for parallelism
 
 	for i, group := range config.Devices[idev].Groupings {
 		if group.Priority {
@@ -502,27 +513,38 @@ func collectDev(idev int) {
 				}
 				time.Sleep(time.Duration(config.Devices[idev].nextRun-time.Now().UnixNano()-config.Devices[idev].latency/2) * time.Nanosecond)
 
-				result, err := snmp.GetBulk(oids, 0, maxRepetitions)
-				if err != nil {
-					if debug {
-						fmt.Println("Error in GetBulk on", config.Devices[idev].Name, err)
+				data := make([]g.SnmpPDU, 0)
+				var err error
+				for _, oid := range config.Devices[idev].Groupings[i].Status {
+					result, err := snmp.WalkAll(oid)
+					if err == nil {
+						data = append(data, result...)
+					} else {
+						break
 					}
-					query_chan <- nil
-					return
 				}
 
-				if err != nil {
-					log.Println(Red+"Error during oid fetch for interface status host:", config.Devices[idev].Host, err, Reset)
+				{
+					oids := mkList([]string{}, config.Devices[idev].Groupings[i].Labels)
+					var result *g.SnmpPacket
+					result, err = snmp.GetBulk(oids, 0, uint8(maxRepetitions))
+					if err == nil {
+						data = append(data, result.Variables...)
+					}
 				}
-				query_chan <- result
+
+				if len(data) == 0 {
+					log.Println(Red+"Error during oid fetch for interface status, name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
+				}
+
+				query_chan <- data
 			}(idev, i)
 		}
 	}
-	group_data := make([](*g.SnmpPacket), len(config.Devices[idev].Groupings))
 	for i, _ := range config.Devices[idev].Groupings {
 		if config.Devices[idev].Groupings[i].Priority {
-			group_data[i] = <-query_chan
-			if group_data[i] == nil {
+			config.Devices[idev].group_data[i] = <-query_chan
+			if len(config.Devices[idev].group_data[i]) == 0 {
 				return
 			}
 		}
@@ -542,11 +564,11 @@ func collectDev(idev int) {
 
 	//dev_query := make(chan *g.SnmpPacket)
 	//func() {
-	time.Sleep(80 * time.Millisecond) // * time.Nanosecond)
+	//time.Sleep(80 * time.Millisecond) // * time.Nanosecond)
 	oids := mkList([]string{}, config.Devices[idev].Status)
 	oids = mkList(oids, config.Devices[idev].Labels)
 	var sent time.Time
-	snmp.Observer = func(e g.EventType) {
+	snmp.Timekeeper = func(e g.EventType) {
 		if e == g.Sent {
 			sent = time.Now()
 		} else if e == g.Reply {
@@ -554,7 +576,7 @@ func collectDev(idev int) {
 		}
 	}
 	dev_data, err := snmp.Get(oids) // Get() accepts up to g.MAX_OIDS
-	snmp.Observer = nil
+	snmp.Timekeeper = nil
 	if err != nil {
 		log.Println("Error during oid fetch for device status host:", config.Devices[idev].Host, err)
 		return
@@ -598,40 +620,46 @@ func collectDev(idev int) {
 
 	// Loop over the rest of the non priority groups
 	for i, group := range config.Devices[idev].Groupings {
-		time.Sleep(80 * time.Millisecond)
+		//time.Sleep(80 * time.Millisecond)
 		if !group.Priority {
 			if debug {
 				fmt.Println("#", config.Devices[idev].Name, "setting up query for", group.Group)
 			}
 
-			oids := mkList([]string{}, config.Devices[idev].Groupings[i].Status)
-			oids = mkList(oids, config.Devices[idev].Groupings[i].Labels)
 			if debug {
 				fmt.Println("#", config.Devices[idev].Name, "sending query for", config.Devices[idev].Groupings[i].Group, oids)
 			}
 
-			/*results := []SnmpPDU{}
-			for _, oid := range oids {
-				result, err := snmp.WalkAll(oids)
+			data := make([]g.SnmpPDU, 0)
+			var err error
+			for _, oid := range config.Devices[idev].Groupings[i].Status {
+				result, err := snmp.WalkAll(oid)
 				if err == nil {
-					results = append(results, result)
+					data = append(data, result...)
+				} else {
+					break
 				}
-			}*/
-
-			result, err := snmp.GetBulk(oids, 0, maxRepetitions)
-			if err != nil {
-				continue
 			}
 
-			if err != nil {
-				log.Println("Error during oid fetch for interface status host:", config.Devices[idev].Host, err)
+			{
+				oids := mkList([]string{}, config.Devices[idev].Groupings[i].Labels)
+				var result *g.SnmpPacket
+				result, err = snmp.GetBulk(oids, 0, uint8(maxRepetitions))
+				if err == nil {
+					data = append(data, result.Variables...)
+				}
 			}
-			group_data[i] = result
+
+			if len(data) == 0 {
+				log.Println(Red+"Error during oid fetch for interface status, name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
+			}
+
+			config.Devices[idev].group_data[i] = data
 		}
 	}
 
 	for i, grp := range config.Devices[idev].Groupings {
-		parse(dev_labels, grp, group_data[i], runTime, &outData)
+		parse(dev_labels, grp, config.Devices[idev].group_data[i], runTime, &outData)
 	}
 
 	if config.Devices[idev].latency > 0 {
@@ -663,8 +691,8 @@ func printPDU(pdu g.SnmpPDU, oid_type string) string {
 	return ""
 }
 
-func parse(dev_labels map[string]string, group ConfigGroup, data *g.SnmpPacket, runTime int64, outData *bytes.Buffer) {
-	if data == nil {
+func parse(dev_labels map[string]string, group ConfigGroup, data []g.SnmpPDU, runTime int64, outData *bytes.Buffer) {
+	if len(data) == 0 {
 		if debug {
 			log.Println(Yellow+"Empty SNMP reply on", dev_labels["device_name"], "- Cannot parse data for group", group.Group, Reset)
 		}
@@ -678,7 +706,7 @@ func parse(dev_labels map[string]string, group ConfigGroup, data *g.SnmpPacket, 
 	group_labels := make(map[string]map[string]string)
 	for lbl, oid := range group.Labels {
 		oid_dot, oid_type := dotEnd(oid)
-		for _, variable := range data.Variables {
+		for _, variable := range data {
 			if strings.HasPrefix(variable.Name, oid_dot) {
 				t := variable.Name[(len(oid_dot)):]
 				//fmt.Println("oid=", oid, "name=", variable.Name, "t=", t, "lbl=", lbl, fmt.Sprintf("%v", variable.Value), index)
@@ -699,7 +727,7 @@ func parse(dev_labels map[string]string, group ConfigGroup, data *g.SnmpPacket, 
 	//index := make(map[string]int)
 	for stat, oid := range group.Status {
 		oid_dot, oid_type := dotEnd(oid)
-		for _, variable := range data.Variables {
+		for _, variable := range data {
 			if strings.HasPrefix(variable.Name, oid_dot) {
 				t := variable.Name[len(oid_dot):]
 				if _, ok := group_labels[t]; !ok {
