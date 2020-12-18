@@ -103,6 +103,7 @@ interval: 1m
 
 ## General Section
 - interval:  The default interval for all devices, unless specified (default: 1m)
+- push:  URLs of POST endpoints to push data -- for https endpoints, mTLS is attempted if cert/key is specified on the command line
 
 ## Device Sub-tree
 Properties fields:
