@@ -27,6 +27,16 @@ This app is a generic SNMP-Prometheus tool that allows Prometheus & Grafana to q
   -verify-server
         Verify or disable server certificate check (default true)
 ```
+# Verification it is working
+Once you have setup the configuration file and pointed the `snmp-prom` executable `-config`, you can browse with either your web browser or a cURL command to verify that the metrics are being collected by going to http://localhost:9070
+
+```
+$ curl localhost:9070
+snmp_interfaces_ifInErrors{router="server_room",identity="TEST",model="RouterOS RB750GL",oid_index="3",name="ether3",device_host="10.12.254.192",device_name="test"} 0 1608261300000
+snmp_interfaces_ifInErrors{oid_index="4",device_name="test",identity="TEST",router="server_room",model="RouterOS RB750GL",device_host="10.12.254.192",name="bridge1"} 0 1608261300000
+...
+```
+
 
 # Getting Started
 First you must build a config file to tell snmp-prom how to query your SNMP devices.  To start let's first look at what a config.yml looks likt then we'll break it down:
