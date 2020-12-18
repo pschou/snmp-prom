@@ -78,6 +78,7 @@ type ConfigGroup struct {
 	Status       map[string]string  `yaml:"status"`
 	StaticLabels map[string]string  `yaml:"static-labels"`
 	StaticStatus map[string]float64 `yaml:"static-status"`
+	Interval     string             `yaml:"interval"`
 }
 
 var deviceMetrics []string
@@ -107,7 +108,9 @@ func main() {
 	var cert_file = flag.String("cert", "/etc/pki/server.pem", "File to load with CERT - automatically reloaded every minute")
 	var key_file = flag.String("key", "/etc/pki/server.pem", "File to load with KEY - automatically reloaded every minute")
 	var root_file = flag.String("ca", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", "File to load with ROOT CAs - reloaded every minute by adding any new entries")
+	var verify_client = flag.Bool("verify-client", true, "Verify or disable client certificate check")
 	var verify_server = flag.Bool("verify-server", true, "Verify or disable server certificate check")
+	var secure_client = flag.Bool("secure-client", true, "Enforce TLS 1.2 on client side")
 	var secure_server = flag.Bool("secure-server", true, "Enforce TLS 1.2 on server side")
 	var tls_enabled = flag.Bool("tls", false, "Enable listener TLS (use -tls=true)")
 	var verbose = flag.Bool("debug", false, "Verbose output")
@@ -151,8 +154,12 @@ func main() {
 		config.Interval = "1m"
 	}
 
+	var min_interval time.Duration
 	passed := true
 	for i, dev := range config.Devices {
+		if dev.Enabled == false {
+			continue
+		}
 		if dev.CopyFrom != "" {
 			src_i := 0
 			for src, src_dev := range config.Devices {
@@ -169,6 +176,24 @@ func main() {
 				config.Devices[i].Groupings = config.Devices[src_i].Groupings
 			} else {
 				log.Println("Warning: copy-from source device", dev.CopyFrom, "missing for", dev.Name)
+			}
+		}
+
+		if dev.Interval == "" {
+			config.Devices[i].Interval = config.Interval
+		}
+
+		if min_interval == 0 {
+			interval, err := time.ParseDuration(config.Devices[i].Interval)
+			if err == nil {
+				min_interval = interval
+			}
+		} else {
+			interval, err := time.ParseDuration(config.Devices[i].Interval)
+			if err == nil {
+				if min_interval.Nanoseconds() > interval.Nanoseconds() {
+					min_interval = interval
+				}
 			}
 		}
 
@@ -189,9 +214,6 @@ func main() {
 			log.Println(fmt.Sprintf("#conf %s: %+v", dev.Name, config.Devices[i]))
 		}
 
-		if dev.Interval == "" {
-			config.Devices[i].Interval = config.Interval
-		}
 	}
 	if passed == false {
 		log.Fatal("Failed config checks")
@@ -242,6 +264,10 @@ func main() {
 		}
 	}
 
+	// Expose prometheus endpoint for querying metrics for debugging
+	http.HandleFunc("/metrics", ServeMetrics)
+	go http.Serve(l, nil)
+
 	// make the query interval be unique to each device
 	// Collect metrics from snmp endpoints
 	deviceMetrics = make([]string, len(config.Devices))
@@ -271,9 +297,99 @@ func main() {
 		}
 	}
 
-	// Expose prometheus endpoint for querying metrics
-	http.HandleFunc("/metrics", ServeMetrics)
-	http.Serve(l, nil)
+	// Push metrics if a push endpoint has been defined
+	if config.Push != "" {
+		ticker := time.NewTicker(min_interval)
+		for {
+			select {
+			case <-ticker.C:
+
+				func() {
+					var buffer bytes.Buffer
+					for _, data := range deviceMetrics {
+						buffer.WriteString(data)
+					}
+					s := buffer.String()
+					if len(s) < 3 {
+						return
+					}
+					parts := strings.Split(config.Push, " ")
+					for _, url := range parts {
+						tls_client := false
+						//def_port := "80"
+						//if strings.HasPrefix(url, "http://") {
+						//url = strings.TrimPrefix(url, "http://")
+						//} else
+						if strings.HasPrefix(url, "https://") {
+							tls_client = true
+							//def_port = "443"
+							//url = strings.TrimPrefix(url, "https://")
+						}
+
+						/*
+							url_parts := strings.SplitN(url, "/", 2)
+							host, port, err := net.SplitHostPort(url_parts[0])
+							if err != nil {
+								host = url_parts[0]
+								port = def_port
+							}
+							target_addr := net.JoinHostPort(host, port)
+
+
+							var remote net.Conn
+						*/
+						var tlsConfig *tls.Config
+						if tls_client {
+							if *secure_client {
+								tlsConfig = &tls.Config{RootCAs: rootpool,
+									ClientCAs: rootpool, InsecureSkipVerify: *verify_client == false,
+									MinVersion:               tls.VersionTLS12,
+									CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+									PreferServerCipherSuites: true,
+									CipherSuites: []uint16{
+										tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+										tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+										tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+										tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+									},
+								}
+							} else {
+								tlsConfig = &tls.Config{RootCAs: rootpool,
+									ClientCAs: rootpool, InsecureSkipVerify: *verify_client == false}
+							}
+							if &keypair == nil {
+								tlsConfig.Certificates = []tls.Certificate{*keypair}
+							}
+						}
+
+						tr := &http.Transport{
+							TLSClientConfig: tlsConfig,
+						}
+						client := &http.Client{Transport: tr}
+
+						log.Println("Posting metrics to", url, len(s))
+
+						response, err := client.Post(url, "text/plain", bytes.NewBufferString(s))
+						if err != nil {
+							fmt.Println(err)
+							continue
+						}
+						defer response.Body.Close()
+
+						content, _ := ioutil.ReadAll(response.Body)
+						s := strings.TrimSpace(string(content))
+
+						// If there is any reply, return it
+						if len(s) > 0 {
+							fmt.Println(s)
+						}
+
+					}
+				}()
+			}
+		}
+	}
+	// End of Main function
 }
 
 func getSNMP(i int) *g.GoSNMP {
@@ -537,7 +653,7 @@ func collectDev(idev int) {
 				}
 
 				if len(data) == 0 {
-					log.Println(Red+"Error during oid fetch for interface status, name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
+					log.Println(Cyan+"Empty reply during oid fetch for priority group:", config.Devices[idev].Groupings[i].Group, " name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
 				}
 
 				query_chan <- data
@@ -653,7 +769,7 @@ func collectDev(idev int) {
 			}
 
 			if len(data) == 0 {
-				log.Println(Red+"Error during oid fetch for interface status, name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
+				log.Println(Cyan+"Empty reply during oid fetch for group:", config.Devices[idev].Groupings[i].Group, " name:", config.Devices[idev].Name, "host:", config.Devices[idev].Host, err, Reset)
 			}
 
 			config.Devices[idev].group_data[i] = data
