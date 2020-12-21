@@ -29,6 +29,7 @@ import (
 	g "github.com/gosnmp/gosnmp"
 )
 
+var version = "0.1"
 var Reset = "\033[0m"
 var Red = "\033[31m"
 var Green = "\033[32m"
@@ -99,7 +100,7 @@ var timeout = 5
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Simple SNMP prometheus exporter, written by Paul Schou github@paulschou.com in December 2020\nAll rights reserved, personal use only, provided AS-IS -- not responsible for loss.\nUsage implies agreement.\n\n Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Simple SNMP prometheus exporter (%s), written by Paul Schou github@paulschou.com in December 2020\nPrsonal use only, provided AS-IS -- not responsible for loss.\nUsage implies agreement.\n\n Usage of %s:\n", version, os.Args[0])
 		flag.PrintDefaults()
 	}
 
