@@ -563,7 +563,7 @@ func LoadCertficatesFromFile(path string) error {
 }
 
 func ServeMetrics(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Server", "SNMP-Prom Exporter - Written by Paul Schou snmp-prom@paulschou.com; Copyright Dec 2020 - All rights reserved; Licensed for Personal Use Only")
+	w.Header().Set("Server", "SNMP-Prom Exporter - Written by PaulSchou.com; CopyRight 2020 see license file for more details")
 	w.Header().Add("Cache-Control:", "no-store, no-cache")
 	w.Header().Add("X-Content-Type-Options", "nosniff")
 	w.Header().Add("X-XSS-Protection", "1; mode=block")
