@@ -103,7 +103,7 @@ interval: 1m
 
 The idea above is that a "template" is created with the name of the kind of device to provile, and these can then be loaded up in the subsequent device entries.  This can save updating the entire device list when the template changes can be applied to all.
 
-To get the list of MIBs on a linux box, you'll need to walk the available mibs
+To get the list of MIBs for a device, you'll need to walk the available mibs
 ```
 $ snmpwalk 10.12.0.1 -c public -v 2c
 ...
