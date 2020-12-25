@@ -101,6 +101,23 @@ interval: 1m
   auth-password: authpass2
 ```
 
+The idea above is that a "template" is created with the name of the kind of device to provile, and these can then be loaded up in the subsequent device entries.  This can save updating the entire device list when the template changes can be applied to all.
+
+To get the list of MIBs on a linux box, you'll need to walk the available mibs
+```
+$ snmpwalk 10.12.0.1 -c public -v 2c
+...
+IP-MIB::ip.21.1.1.10.12.254.10 = IpAddress: 10.12.254.10
+IP-MIB::ip.21.1.1.10.12.254.111 = IpAddress: 10.12.254.111
+...
+```
+
+and then get the numerical value of said MIB:
+```
+$ snmptranslate -On CISCO-RHINO-MIB::ciscoLS1010ChassisFanLed
+ .1.3.6.1.4.1.9.5.11.1.1.12
+```
+
 ## General Section
 - interval:  The default interval for all devices, unless specified (default: 1m)
 - push:  URLs of POST endpoints to push data -- for https endpoints, mTLS is attempted if cert/key is specified on the command line
