@@ -370,7 +370,7 @@ func main() {
 
 						log.Println("Posting metrics to", url, len(s))
 
-						response, err := client.Post(url, "text/plain", bytes.NewBufferString(s))
+						response, err := client.Post(url, "text/plain", bytes.NewBuffer([]byte(s)))
 						if err != nil {
 							fmt.Println(err)
 							continue
@@ -687,15 +687,15 @@ func collectDev(idev int) {
 	oids := mkList([]string{}, config.Devices[idev].Status)
 	oids = mkList(oids, config.Devices[idev].Labels)
 	var sent time.Time
-	snmp.Timekeeper = func(e g.EventType) {
-		if e == g.Sent {
-			sent = time.Now()
-		} else if e == g.Reply {
-			config.Devices[idev].latency = time.Since(sent).Nanoseconds()
-		}
+	snmp.OnSent = func(x *g.GoSNMP) {
+		sent = time.Now()
+	}
+	snmp.OnRecv = func(x *g.GoSNMP) {
+		config.Devices[idev].latency = time.Since(sent).Nanoseconds()
 	}
 	dev_data, err := snmp.Get(oids) // Get() accepts up to g.MAX_OIDS
-	snmp.Timekeeper = nil
+	snmp.OnSent = nil
+	snmp.OnRecv = nil
 	if err != nil {
 		log.Println("Error during oid fetch for device status host:", config.Devices[idev].Host, err)
 		return
