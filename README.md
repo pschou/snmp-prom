@@ -101,6 +101,26 @@ interval: 1m
   auth-password: authpass2
 ```
 
+The idea above is that a "template" is created with the name of the kind of device to provile, and these can then be loaded up in the subsequent device entries.  This can save updating the entire device list when the template changes can be applied to all.
+
+To get the list of MIBs for a device, you'll need to walk the available mibs
+```
+$ snmpwalk 10.12.0.1 -c public -v 2c -Cc
+...
+IP-MIB::ip.21.1.1.10.12.254.10 = IpAddress: 10.12.254.10
+IP-MIB::ip.21.1.1.10.12.254.111 = IpAddress: 10.12.254.111
+...
+```
+
+
+Then get the numerical value of said MIB:
+```
+$ snmptranslate -On CISCO-RHINO-MIB::ciscoLS1010ChassisFanLed
+ .1.3.6.1.4.1.9.5.11.1.1.12
+```
+
+This numerical version is then tabulated in the yaml file as the prometheus metric / label.  Please note that while picking the label names, you may only use names that have the regex equvilant: `[a-zA-Z_][a-zA-Z0-9_]*`, basically this means only an alpha initial character (preferrably lower case) and then alpha numeric after that with underscores `_`... hyphens `-` are NOT allowed (as they can be confused as a math operator).
+
 ## General Section
 - interval:  The default interval for all devices, unless specified (default: 1m)
 - push:  URLs of POST endpoints to push data -- for https endpoints, mTLS is attempted if cert/key is specified on the command line
