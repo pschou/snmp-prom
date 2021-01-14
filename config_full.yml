@@ -19,22 +19,22 @@ devices:
     auth-password: authpass
     priv-password: encpass
 
-  - name: outdoors
+  - name: parkinglot
     enabled: true
     host: 10.12.254.192
     copy-oids-from: router
 
-  - name: upstairs
+  - name: serverroom
     enabled: true
     host: 10.12.10.20
     copy-oids-from: router
 
-  - name: livingroom
+  - name: backoffice
     enabled: true
     host: 10.12.10.11
     copy-oids-from: router
 
-  - name: router
+  - name: mainrouter
     enabled: true
     host: 10.12.0.1
     port: 161
@@ -141,31 +141,3 @@ devices:
           signal_strength_ch1: .1.3.6.1.4.1.14988.1.1.1.2.1.16
           tx_signal_strength_ch2: .1.3.6.1.4.1.14988.1.1.1.2.1.17
           signal_strength_ch2: .1.3.6.1.4.1.14988.1.1.1.2.1.18
-
-# This above config produces output like the following:
-# centos$ curl http://localhost:9070/metrics
-#
-# # Device livingroom (10.12.10.11)
-# snmp_up{identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11",device_name="livingroom"} 1 1610589960000
-# snmp_uptime{model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom"} 336580600 1610589960000
-# snmp_memory_used{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11"} 51992 1610589960000
-# snmp_memory_total{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11"} 131072 1610589960000
-# snmp_interfaces_ifOutErrors{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan1",oid_index="1",device_host="10.12.10.11"} 0 1610589960000
-# snmp_interfaces_ifOutErrors{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan2",oid_index="2",device_host="10.12.10.11"} 0 1610589960000
-# snmp_interfaces_ifOutErrors{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="ether1",oid_index="3"} 0 1610589960000
-# snmp_interfaces_ifOutErrors{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="ether2",oid_index="4"} 0 1610589960000
-# snmp_interfaces_ifOutErrors{oid_index="5",name="bridge1",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD"} 0 1610589960000
-# snmp_interfaces_ifOutErrors{identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",oid_index="6",name="vlan10",device_host="10.12.10.11",device_name="livingroom"} 0 1610589960000
-# snmp_interfaces_ifType{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan1",oid_index="1"} 71 1610589960000
-# snmp_interfaces_ifType{identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan2",oid_index="2",device_host="10.12.10.11",device_name="livingroom"} 71 1610589960000
-# snmp_interfaces_ifType{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",oid_index="3",name="ether1",device_host="10.12.10.11"} 6 1610589960000
-# snmp_interfaces_ifType{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="ether2",oid_index="4",device_host="10.12.10.11"} 6 1610589960000
-# snmp_interfaces_ifType{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="bridge1",oid_index="5"} 209 1610589960000
-# snmp_interfaces_ifType{model="RouterOS RBcAPGi-5acD2nD",name="vlan10",oid_index="6",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom"} 135 1610589960000
-# snmp_interfaces_ifHighSpeed{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan1",oid_index="1"} 50 1610589960000
-# snmp_interfaces_ifHighSpeed{device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11",oid_index="2",name="wlan2"} 50 1610589960000
-# snmp_interfaces_ifHighSpeed{oid_index="3",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",name="ether1"} 1000 1610589960000
-# snmp_interfaces_ifHighSpeed{model="RouterOS RBcAPGi-5acD2nD",name="ether2",oid_index="4",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom"} 100 1610589960000
-# snmp_interfaces_ifHighSpeed{device_name="livingroom",identity="LivingRoom",name="bridge1",oid_index="5",model="RouterOS RBcAPGi-5acD2nD",device_host="10.12.10.11"} 0 1610589960000
-# snmp_interfaces_ifHighSpeed{device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="vlan10",oid_index="6"} 0 1610589960000
-# snmp_interfaces_ifHCOutOctets{oid_index="1",device_host="10.12.10.11",device_name="livingroom",identity="LivingRoom",model="RouterOS RBcAPGi-5acD2nD",name="wlan1"} 7510759399 1610589960000
