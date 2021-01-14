@@ -1,6 +1,6 @@
 ---
 interval: 1m
-push: http://centos.schou.me:9550/collector/site/home
+push: http://centos.schou.me:9550/collector/site/office
 devices:
   - name: basement
     enabled: true
