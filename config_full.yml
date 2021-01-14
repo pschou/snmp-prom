@@ -6,6 +6,8 @@ devices:
     enabled: true
     host: 10.12.254.246
     copy-oids-from: router
+    # Note that the passwords do not copy.
+    # You will need to include them for each device.
 
   - name: backyard
     enabled: true
