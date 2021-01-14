@@ -4,14 +4,14 @@ Simple SNMP exporter for Prometheus
 This app is a generic SNMP-Prometheus tool that allows Prometheus & Grafana to query any SNMP endpoint to display live metrics.
 
 # Motiviation
-When I went to survey the SNMP tools out for managing my routers and switches, I found an apparent lack of interest for metrics that were usable for detecting line loss.  Many tools out there came close, like Cacti and SolarWinds, but limited by either the customizability and/or the windowing method.  By limited by windowing method is, if one has two routers that are communicating over a distance.  If one router sees a spikes starting at 12 seconds after the minute and stops 24 seconds after the minute, I would hope that my output from one router should as closely match the input at another router.  Of course, the latency will case the edges not to match up exactly, but the idea is just this.  If I take router A interface metric which is tied to router B interface, I want to be able to take a A-B and have a zero sum, or as close to zero as possible.  This way if optics on sending versus see a substantial loss (say due to weather or line stress), I will be able to see this over time.  Even if there is a lower-level frame error-checking (like at layer 1 or 2) – ie: in the optical hardware or some other media converter.
+When I surveyed the SNMP tools out for managing my routers and switches, I found an apparent lack of interest in metrics that were usable for detecting line loss. Means of mention came close, like Cacti and SolarWinds, but these were either limited by customizability or their windowing method.  By being limited by the windowing method: this means if two routers communicate over a distance-- If one router sees increased flow starting at 12 seconds after the minute and then stops 24 seconds after the minute; this measurement should be seen from the output of one router and should as closely match the input at the alternate router.  Of course, the latency will cause the edges not to match up exactly, but the idea is just this.  If I take the router A interface metric tied to the router B interface, I want to take an A-B and have a zero-sum, or as close to zero as possible.  If optics on sending versus received see a substantial loss (say due to weather or line stress), I will see this over time. 
 
-When I saw all of this, I saw this as a challenge: to write one that just worked.  Hence you have snmp-prom.
+When I saw all of this, I saw this as a challenge: to write one that just worked.  Hence you have SNMP-prom.
 
-What is addressed:
+Whats addressed:
 
-1.	Temporal windows which match up everywhere - see above
-2.	OID table, keep it simple - we don’t need to look up MIBs for queries that are already chosen
+1.	Temporal windows that match up everywhere - see above
+2.	OID table, keep it simple - we don’t need to look up MIBs for defined OIDs
 3.	Prometheus time - between routers every metric has to have the same metric time
 
 Things not considered and could be reviewed in the future:
