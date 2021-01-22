@@ -59,6 +59,7 @@ snmp_interfaces_ifInErrors{oid_index="4",device_name="test",identity="TEST",rout
 First you must build a config file to tell snmp-prom how to query your SNMP devices.  To start let's first look at what a config.yml looks likt then we'll break it down:
 
 ```
+---
 interval: 1m
 devices:
 - name: router
