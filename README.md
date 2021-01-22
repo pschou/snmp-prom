@@ -60,6 +60,7 @@ First you must build a config file to tell snmp-prom how to query your SNMP devi
 
 ```
 interval: 1m
+devices:
 - name: router
   enabled: true
   host: 10.12.0.1
@@ -141,6 +142,8 @@ This numerical version is then tabulated in the yaml file as the prometheus metr
 ## General Section
 - interval:  The default interval for all devices, unless specified (default: 1m)
 - push:  URLs of POST endpoints to push data -- for https endpoints, mTLS is attempted if cert/key is specified on the command line
+
+Note: A good prometheus push gateway endpoint can be found here: https://github.com/pschou/prom-collector
 
 ## Device Sub-tree
 Properties fields:
